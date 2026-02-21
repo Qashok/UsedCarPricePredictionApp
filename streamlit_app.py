@@ -1,5 +1,7 @@
+import os
+import joblib
+import pandas as pd
 import streamlit as st
-import requests
 
 brand_list = [
     "Maruti", "Hyundai", "Honda", "Toyota", "Tata", "Mahindra",
@@ -10,9 +12,33 @@ brand_list = [
 ]
 
 st.set_page_config(page_title="Car Price Predictor", page_icon="🚗")
+st.title("🚗 Car Selling Price Predictor")
+st.caption("Deployed on Streamlit Cloud • Model: KNN")
 
-st.title("🚗 Car Selling Price Predictor (UI)")
+# -----------------------------
+# Load artifacts from same folder as this file
+# -----------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+@st.cache_resource
+def load_artifacts():
+    knn = joblib.load(os.path.join(BASE_DIR, "knn_model.pkl"))
+    transformer = joblib.load(os.path.join(BASE_DIR, "transformer.pkl"))
+    features = joblib.load(os.path.join(BASE_DIR, "features.pkl"))
+    return knn, transformer, features
+
+knn, transformer, features = load_artifacts()
+
+# normalize features to python list
+if not isinstance(features, list):
+    try:
+        features = features.tolist()
+    except Exception:
+        features = list(features)
+
+# -----------------------------
+# UI Inputs
+# -----------------------------
 brand = st.selectbox("Brand", sorted(brand_list))
 fuel = st.selectbox("Fuel", ["Diesel", "Petrol", "CNG", "LPG", "Electric"])
 owner = st.selectbox(
@@ -27,31 +53,31 @@ km_driven = st.number_input(
     step=1000
 )
 
-# 🚫 model selector removed (KNN only)
-
+# -----------------------------
+# Predict
+# -----------------------------
 if st.button("Predict"):
-    payload = {
-        "model": "knn",   # ✅ always KNN
-        "data": {
+    try:
+        X = pd.DataFrame([{
             "brand": brand,
             "fuel": fuel,
             "owner": owner,
             "km_driven": float(km_driven)
-        }
-    }
+        }])
 
-    try:
-        res = requests.post(
-            "http://127.0.0.1:5000/predict",
-            json=payload,
-            timeout=10
-        )
-        out = res.json()
+        # If your saved "features.pkl" includes the raw feature names used before transform,
+        # align to that order.
+        # If it doesn't match, we fallback safely to X's columns.
+        cols = [c for c in features if c in X.columns]
+        if cols:
+            X = X[cols]
 
-        if res.status_code != 200:
-            st.error(out.get("error", "Unknown error"))
-        else:
-            st.success(f"✅ Predicted Price: ₹ {out['prediction']:,.0f}")
+        X_tr = transformer.transform(X)
+        pred = float(knn.predict(X_tr)[0])
+
+        st.success(f"✅ Predicted Price: ₹ {pred:,.0f}")
 
     except Exception as e:
-        st.error(f"❌ Could not connect to Flask API. Is it running?\n\n{e}")
+        st.error("❌ Prediction failed. This usually happens if feature names/order don't match training.")
+        st.exception(e)
+        
