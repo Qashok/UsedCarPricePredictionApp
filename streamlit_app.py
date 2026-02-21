@@ -65,9 +65,8 @@ if st.button("Predict"):
             "km_driven": float(km_driven)
         }])
 
-        # If your saved "features.pkl" includes the raw feature names used before transform,
-        # align to that order.
-        # If it doesn't match, we fallback safely to X's columns.
+        # If "features.pkl" includes raw feature names used before transform,
+        # align to that order. Otherwise, fallback to X columns.
         cols = [c for c in features if c in X.columns]
         if cols:
             X = X[cols]
@@ -80,4 +79,3 @@ if st.button("Predict"):
     except Exception as e:
         st.error("❌ Prediction failed. This usually happens if feature names/order don't match training.")
         st.exception(e)
-        
